@@ -52,6 +52,18 @@ jobs:
       - run: brew test-bot --only-formulae
         if: github.event_name == 'pull_request'
 
+      - name: Test Alacritty cask
+        if: github.event_name == 'pull_request' && runner.os == 'macOS'
+        env:
+          TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: |
+          brew install --cask "$TAP_NAME/alacritty"
+          alacritty --version
+          TERMINFO="$HOME/.terminfo" infocmp alacritty
+          codesign --verify --deep --strict /Applications/Alacritty.app
+          test -z "$(xattr -p com.apple.quarantine /Applications/Alacritty.app 2>/dev/null || true)"
+          brew uninstall --cask "$TAP_NAME/alacritty"
+
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
