@@ -1,6 +1,6 @@
 cask "adamekka-t3-code" do
-  version "0.0.37-nightly.20260831.65"
-  sha256 "34f21d1fe8cbbbc233a812ac7fcbae3576f3cb70b56de8ce367c1f74ebd88937"
+  version "0.0.38-nightly.20260901.66"
+  sha256 "c2ed7d7c829f61fd46682b8d5329ae7f13c561521002a16b4b48bead7f0ac74a"
 
   url "https://github.com/Adamekka/t3code/releases/download/v#{version}/T3-Code-#{version}-arm64.dmg"
   name "T3 Code"
