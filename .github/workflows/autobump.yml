@@ -21,8 +21,7 @@ jobs:
   autobump:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
@@ -34,8 +33,11 @@ jobs:
 
       - name: Bump formulae and casks
         env:
-          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PRs created with GITHUB_TOKEN require manual approval before CI runs.
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_AUTOBUMP_TOKEN }}
           HOMEBREW_GIT_COMMITTER_NAME: ${{ steps.git_setup.outputs.name }}
           HOMEBREW_GIT_COMMITTER_EMAIL: ${{ steps.git_setup.outputs.email }}
+          # The macOS CI jobs verify casks that use the approved Gatekeeper bypass.
+          HOMEBREW_TEST_BOT_AUTOBUMP: 1
           TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
         run: brew bump --no-fork --open-pr --bump-synced --tap="$TAP_NAME"

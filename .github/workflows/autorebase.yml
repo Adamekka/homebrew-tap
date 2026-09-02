@@ -1,0 +1,172 @@
+name: rebase Homebrew bumps
+
+on:
+  workflow_run:
+    workflows:
+      - brew test-bot
+    types:
+      - completed
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  rebase:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      REPOSITORY: ${{ github.repository }}
+      REPOSITORY_OWNER: ${{ github.repository_owner }}
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Validate Homebrew bump pull request
+        id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pull_requests="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/$REPOSITORY/commits/$TESTED_SHA/pulls"
+          )"
+          eligible="$(
+            jq \
+              --arg owner "$REPOSITORY_OWNER" \
+              --arg repository "$REPOSITORY" \
+              --arg sha "$TESTED_SHA" \
+              '[.[] | select(
+                .state == "open" and
+                .base.ref == "main" and
+                .base.repo.full_name == $repository and
+                .head.repo.full_name == $repository and
+                .head.sha == $sha and
+                ((.user.login | ascii_downcase) == ($owner | ascii_downcase)) and
+                (.head.ref | startswith("bump-")) and
+                ((.body // "") | gsub("\r\n"; "\n") |
+                  startswith("Created by `brew bump`\n\n---\n\nCreated with `brew bump-"))
+              )]' <<< "$pull_requests"
+          )"
+
+          count="$(jq 'length' <<< "$eligible")"
+          if [[ "$count" == 0 ]]; then
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$count" != 1 ]]; then
+            echo "Expected one eligible Homebrew bump PR for $TESTED_SHA, found $count" >&2
+            exit 1
+          fi
+
+          number="$(jq -r '.[0].number' <<< "$eligible")"
+          files="$(
+            gh api --paginate \
+              -H "Accept: application/vnd.github+json" \
+              "repos/$REPOSITORY/pulls/$number/files?per_page=100" |
+              jq --slurp 'add'
+          )"
+          kind="$(
+            jq -r '
+              if length > 0 and all(.[];
+                .status == "modified" and
+                (.filename | test("^Formula/[^/]+\\.rb$"))
+              ) then
+                "formula"
+              elif length > 0 and all(.[];
+                .status == "modified" and
+                (.filename == "Casks/alacritty.rb" or .filename == "Casks/qbittorrent.rb")
+              ) then
+                "cask"
+              else
+                "invalid"
+              end
+            ' <<< "$files"
+          )"
+          if [[ "$kind" == "invalid" ]]; then
+            echo "Homebrew bump PR changes unexpected files:" >&2
+            jq -r '.[].filename' <<< "$files" >&2
+            exit 1
+          fi
+
+          {
+            echo "eligible=true"
+            echo "kind=$kind"
+            echo "number=$number"
+            echo "head_ref=$(jq -r '.[0].head.ref' <<< "$eligible")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the bump includes current main
+        if: steps.bump.outputs.eligible == 'true'
+        id: base
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          status="$(gh api "repos/$REPOSITORY/compare/main...$TESTED_SHA" --jq '.status')"
+          case "$status" in
+            ahead)
+              echo "current=true" >> "$GITHUB_OUTPUT"
+              ;;
+            diverged)
+              echo "current=false" >> "$GITHUB_OUTPUT"
+              ;;
+            behind | identical)
+              echo "current=integrated" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unexpected comparison status: $status" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Rebase stale bump
+        if: steps.bump.outputs.eligible == 'true' && steps.base.outputs.current == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_AUTOBUMP_TOKEN }}
+          NUMBER: ${{ steps.bump.outputs.number }}
+        run: gh pr update-branch "$NUMBER" --repo "$REPOSITORY" --rebase
+
+      - name: Fast-forward tested bump
+        if: >-
+          steps.bump.outputs.eligible == 'true' &&
+          steps.bump.outputs.kind == 'cask' &&
+          steps.base.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ steps.bump.outputs.head_ref }}
+          NUMBER: ${{ steps.bump.outputs.number }}
+        run: |
+          # force=false atomically rejects the update if main changed after the comparison.
+          gh api --method PATCH "repos/$REPOSITORY/git/refs/heads/main" \
+            -f sha="$TESTED_SHA" \
+            -F force=false
+
+          for _ in {1..60}; do
+            state="$(gh pr view "$NUMBER" --repo "$REPOSITORY" --json state --jq '.state')"
+            [[ "$state" == "MERGED" ]] && break
+            sleep 1
+          done
+          test "$state" = "MERGED"
+          gh api --method DELETE "repos/$REPOSITORY/git/refs/heads/$HEAD_REF"
+
+      - name: Publish tested formula bump
+        if: >-
+          steps.bump.outputs.eligible == 'true' &&
+          steps.bump.outputs.kind == 'formula' &&
+          steps.base.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ steps.bump.outputs.number }}
+        run: >-
+          gh workflow run publish.yml
+          --repo "$REPOSITORY"
+          --ref main
+          --field pull_request="$NUMBER"
+          --field head_sha="$TESTED_SHA"
