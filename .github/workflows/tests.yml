@@ -64,6 +64,20 @@ jobs:
           test -z "$(xattr -p com.apple.quarantine /Applications/Alacritty.app 2>/dev/null || true)"
           brew uninstall --cask "$TAP_NAME/alacritty"
 
+      - name: Test qBittorrent cask
+        if: github.event_name == 'pull_request' && runner.os == 'macOS'
+        env:
+          TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: |
+          brew install --cask "$TAP_NAME/qbittorrent"
+          cask_version="$(brew info --cask --json=v2 "$TAP_NAME/qbittorrent" | plutil -extract casks.0.version raw -o - -)"
+          test "$(/Applications/qBittorrent.app/Contents/MacOS/qbittorrent --version)" = "qBittorrent v$cask_version"
+          lipo /Applications/qBittorrent.app/Contents/MacOS/qbittorrent -verify_arch x86_64 arm64
+          codesign --verify --deep --strict /Applications/qBittorrent.app
+          test -z "$(xattr -p com.apple.quarantine /Applications/qBittorrent.app 2>/dev/null || true)"
+          brew uninstall --cask "$TAP_NAME/qbittorrent"
+          test ! -e /Applications/qBittorrent.app
+
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
