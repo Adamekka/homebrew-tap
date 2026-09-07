@@ -28,10 +28,10 @@ cask "alacritty" do
   fish_completion "#{appdir}/Alacritty.app/Contents/Resources/completions/alacritty.fish"
   zsh_completion "#{appdir}/Alacritty.app/Contents/Resources/completions/_alacritty"
 
-  postflight do
+  postflight_steps do
     # Upstream ad-hoc signs the app, so Gatekeeper rejects it while quarantined.
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Alacritty.app"]
+    run "/usr/bin/xattr",
+        args: ["-dr", "com.apple.quarantine", "{{appdir}}/Alacritty.app"]
   end
 
   zap trash: [

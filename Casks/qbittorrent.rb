@@ -17,10 +17,10 @@ cask "qbittorrent" do
 
   app "qbittorrent.app", target: "qBittorrent.app"
 
-  postflight do
+  postflight_steps do
     # Upstream self-signs the app, so Gatekeeper rejects it while quarantined.
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/qBittorrent.app"]
+    run "/usr/bin/xattr",
+        args: ["-dr", "com.apple.quarantine", "{{appdir}}/qBittorrent.app"]
   end
 
   zap trash: [
