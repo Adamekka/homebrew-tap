@@ -12,7 +12,7 @@ cask "alacritty" do
     strategy :github_latest
   end
 
-  depends_on macos: :macos
+  depends_on :macos
 
   app "Alacritty.app"
   binary "#{appdir}/Alacritty.app/Contents/MacOS/alacritty"
