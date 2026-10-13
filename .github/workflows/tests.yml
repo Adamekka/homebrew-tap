@@ -78,6 +78,20 @@ jobs:
           brew uninstall --cask "$TAP_NAME/qbittorrent"
           test ! -e /Applications/qBittorrent.app
 
+      - name: Test Wine Staging cask
+        if: github.event_name == 'pull_request' && runner.os == 'macOS'
+        env:
+          TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: |
+          brew install --cask "$TAP_NAME/wine@staging"
+          cask_version="$(brew info --cask --json=v2 "$TAP_NAME/wine@staging" | plutil -extract casks.0.version raw -o - -)"
+          test "$(wine --version)" = "wine-$cask_version (Staging)"
+          lipo "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine" -verify_arch x86_64
+          test -z "$(xattr -p com.apple.quarantine "/Applications/Wine Staging.app" 2>/dev/null || true)"
+          brew uninstall --cask "$TAP_NAME/wine@staging"
+          test ! -e "/Applications/Wine Staging.app"
+          test ! -e "$(brew --prefix)/bin/wine"
+
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
