@@ -34,7 +34,8 @@ cask "wine@staging" do
     "wine-stable",
     "wine@devel",
   ]
-  depends_on cask: "gstreamer-runtime"
+  # Homebrew's GStreamer cask is also disabled by its Gatekeeper policy.
+  depends_on cask: "adamekka/tap/gstreamer-runtime"
   depends_on :macos
 
   app "Wine Staging.app"

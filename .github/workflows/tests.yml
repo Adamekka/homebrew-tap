@@ -79,11 +79,14 @@ jobs:
           test ! -e /Applications/qBittorrent.app
 
       - name: Test Wine Staging cask
-        if: github.event_name == 'pull_request' && runner.os == 'macOS'
+        if: runner.os == 'macOS'
         env:
           TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
         run: |
           brew install --cask "$TAP_NAME/wine@staging"
+          gstreamer_version="$(brew info --cask --json=v2 "$TAP_NAME/gstreamer-runtime" | plutil -extract casks.0.version raw -o - -)"
+          test "$(/Library/Frameworks/GStreamer.framework/Versions/1.0/bin/gst-inspect-1.0 --version | sed -n '1p')" = "gst-inspect-1.0 version $gstreamer_version"
+          test -z "$(xattr -p com.apple.quarantine /Library/Frameworks/GStreamer.framework 2>/dev/null || true)"
           cask_version="$(brew info --cask --json=v2 "$TAP_NAME/wine@staging" | plutil -extract casks.0.version raw -o - -)"
           test "$(wine --version)" = "wine-$cask_version (Staging)"
           lipo "/Applications/Wine Staging.app/Contents/Resources/wine/bin/wine" -verify_arch x86_64
@@ -91,6 +94,8 @@ jobs:
           brew uninstall --cask "$TAP_NAME/wine@staging"
           test ! -e "/Applications/Wine Staging.app"
           test ! -e "$(brew --prefix)/bin/wine"
+          brew uninstall --cask "$TAP_NAME/gstreamer-runtime"
+          test ! -e /Library/Frameworks/GStreamer.framework/Versions/1.0/bin/gst-inspect-1.0
 
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'

@@ -82,7 +82,7 @@ jobs:
                 "formula"
               elif length > 0 and all(.[];
                 .status == "modified" and
-                (.filename == "Casks/alacritty.rb" or .filename == "Casks/qbittorrent.rb" or .filename == "Casks/wine@staging.rb")
+                (.filename == "Casks/alacritty.rb" or .filename == "Casks/qbittorrent.rb" or .filename == "Casks/wine@staging.rb" or .filename == "Casks/gstreamer-runtime.rb")
               ) then
                 "cask"
               else
